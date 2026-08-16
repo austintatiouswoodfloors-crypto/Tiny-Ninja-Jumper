@@ -9,8 +9,14 @@ import {
   GRAVITY,
   GROUND_FACTOR,
   GROW_MS,
+  HOLD_ACCEL,
+  HOLD_MAX_MS,
   INVIS_MS,
+  JUMP_MIN,
   JUMP_V,
+  MAGNET_MS,
+  MAGNET_RADIUS,
+  MAX_OFFSCREEN_MS,
   NINJA_H,
   NINJA_SCREEN_FACTOR,
   NINJA_W,
@@ -25,7 +31,7 @@ import {
 
 export type GameStatus = "playing" | "dead";
 export type Pose = "run" | "jump";
-export type PowerType = "grow" | "star" | "invis";
+export type PowerType = "grow" | "star" | "invis" | "magnet";
 export type EnemyKind = "walker" | "spiker" | "flyer";
 
 export interface Segment {
@@ -67,6 +73,7 @@ export interface Ninja {
   vy: number;
   grounded: boolean;
   jumps: number;
+  holdUntil: number;
 }
 
 export interface GameState {
@@ -87,8 +94,11 @@ export interface GameState {
   growUntil: number;
   invisUntil: number;
   starUntil: number;
+  magnetUntil: number;
   invUntil: number;
   lastEnemyX: number;
+  offTopSince: number;
+  forcedDown: boolean;
   now: number;
   status: GameStatus;
   nextId: number;
@@ -97,6 +107,7 @@ export interface GameState {
 
 export interface Input {
   jumpQueued: boolean;
+  holding: boolean;
 }
 
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
@@ -118,6 +129,7 @@ export function activePower(s: GameState): PowerType | null {
   if (s.now < s.growUntil) return "grow";
   if (s.now < s.starUntil) return "star";
   if (s.now < s.invisUntil) return "invis";
+  if (s.now < s.magnetUntil) return "magnet";
   return null;
 }
 
@@ -182,14 +194,16 @@ function collectibleTrail(s: GameState, x0: number, x1: number, baseY: number) {
   while (x < x1 - 30) {
     const y = Math.random() < 0.6 ? baseY - 30 : baseY - 30 - rand(45, 95);
     const r = Math.random();
-    if (r < 0.6) {
+    if (r < 0.58) {
       s.coins.push({ id: s.nextId++, wx: x, y });
-    } else if (r < 0.72) {
+    } else if (r < 0.7) {
       s.powerups.push({ id: s.nextId++, wx: x, y, type: "star" });
-    } else if (r < 0.78) {
+    } else if (r < 0.76) {
       s.powerups.push({ id: s.nextId++, wx: x, y, type: "grow" });
-    } else if (r < 0.84) {
+    } else if (r < 0.82) {
       s.powerups.push({ id: s.nextId++, wx: x, y, type: "invis" });
+    } else if (r < 0.88) {
+      s.powerups.push({ id: s.nextId++, wx: x, y, type: "magnet" });
     }
     // else: an intentional empty gap in the trail
     x += rand(85, 165);
@@ -248,6 +262,7 @@ export function createGame(W: number, H: number): GameState {
       vy: 0,
       grounded: true,
       jumps: 0,
+      holdUntil: 0,
     },
     ground: [{ x0: -W, x1: W * 0.95 }],
     platforms: [],
@@ -261,8 +276,11 @@ export function createGame(W: number, H: number): GameState {
     growUntil: 0,
     invisUntil: 0,
     starUntil: 0,
+    magnetUntil: 0,
     invUntil: 0,
     lastEnemyX: 0,
+    offTopSince: 0,
+    forcedDown: false,
     now: Date.now(),
     status: "playing",
     nextId: 1,
@@ -340,11 +358,13 @@ export function step(s: GameState, dt: number, input: Input) {
   s.runSpeed = Math.min(RUN_MAX, RUN_START + (n.worldX / 100) * RUN_ACCEL);
   n.worldX += s.runSpeed * dt;
 
-  // Infinite flap: every tap gives lift. Cap the top so the ninja can
-  // hover but never leave the screen.
-  if (input.jumpQueued) {
-    n.vy = -JUMP_V;
+  // Variable jump: a quick tap is a short hop; holding sustains extra lift
+  // for a bigger jump. Infinite (can re-jump in the air). Disabled while the
+  // ninja is being forced back onto the screen.
+  if (input.jumpQueued && !s.forcedDown) {
+    n.vy = -JUMP_MIN;
     n.grounded = false;
+    n.holdUntil = s.now + HOLD_MAX_MS;
     s.events.push("jump");
   }
   input.jumpQueued = false;
@@ -357,16 +377,32 @@ export function step(s: GameState, dt: number, input: Input) {
   // Vertical integration.
   if (!n.grounded) {
     const feetBefore = n.y + NINJA_H / 2;
+    const holding =
+      input.holding && !s.forcedDown && s.now < n.holdUntil && n.vy < 0;
     n.vy += GRAVITY * dt;
+    if (holding) n.vy -= HOLD_ACCEL * dt; // keep rising while held
     n.y += n.vy * dt;
     const feet = n.y + NINJA_H / 2;
     if (n.vy > 0) landIfPossible(s, feetBefore, feet);
-    // Cap at the top of the screen.
-    const topLimit = NINJA_H / 2 + 6;
-    if (n.y < topLimit) {
-      n.y = topLimit;
-      if (n.vy < 0) n.vy = 0;
+
+    // Temporary off-screen allowance at the top.
+    const topVisible = NINJA_H / 2 + 6;
+    const topHard = -NINJA_H; // absolute ceiling (fully off, a bit above)
+    if (n.y < topVisible) {
+      if (s.offTopSince === 0) s.offTopSince = s.now;
+      if (n.y < topHard) {
+        n.y = topHard;
+        if (n.vy < 0) n.vy = 0;
+      }
+      if (s.now - s.offTopSince > MAX_OFFSCREEN_MS) s.forcedDown = true;
+      if (s.forcedDown && n.vy < 240) n.vy = 240; // pull him back down
+    } else {
+      s.offTopSince = 0;
+      s.forcedDown = false;
     }
+  } else {
+    s.offTopSince = 0;
+    s.forcedDown = false;
   }
 
   const invincible = s.now < s.invUntil;
@@ -412,9 +448,19 @@ export function step(s: GameState, dt: number, input: Input) {
     }
   }
 
-  // Coins.
+  // Coins (with magnet pull).
+  const magnet = s.now < s.magnetUntil;
   for (let i = s.coins.length - 1; i >= 0; i--) {
     const c = s.coins[i];
+    if (magnet) {
+      const cx0 = screenXOf(s, c.wx);
+      const dist = Math.hypot(nx - cx0, ny - c.y);
+      if (dist < MAGNET_RADIUS) {
+        const k = Math.min(1, (720 * dt) / Math.max(dist, 1));
+        c.wx += (n.worldX - c.wx) * k;
+        c.y += (ny - c.y) * k;
+      }
+    }
     const cx = screenXOf(s, c.wx);
     if (cx < -COIN_R * 2) {
       s.coins.splice(i, 1);
@@ -446,6 +492,8 @@ export function step(s: GameState, dt: number, input: Input) {
       } else if (pu.type === "invis") {
         s.invisUntil = s.now + INVIS_MS;
         s.invUntil = Math.max(s.invUntil, s.now + INVIS_MS);
+      } else if (pu.type === "magnet") {
+        s.magnetUntil = s.now + MAGNET_MS;
       } else {
         s.starUntil = s.now + STAR_MS;
         s.invUntil = Math.max(s.invUntil, s.now + STAR_MS);

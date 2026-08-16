@@ -90,10 +90,12 @@ export const EnemyView = React.memo(function EnemyView({
   x,
   y,
   kind,
+  wobble,
 }: {
   x: number;
   y: number;
   kind: EnemyKind;
+  wobble: number;
 }) {
   return (
     <View
@@ -101,6 +103,7 @@ export const EnemyView = React.memo(function EnemyView({
         position: "absolute",
         left: x - ENEMY_W / 2 - (kind === "flyer" ? 10 : 0),
         top: y - ENEMY_H / 2,
+        transform: [{ rotate: `${wobble}deg` }],
         pointerEvents: "none",
       }}
     >
@@ -116,6 +119,7 @@ const POWER_STYLE: Record<
   grow: { bg: colors.powerUp, icon: "expand" },
   star: { bg: colors.warning, icon: "star" },
   invis: { bg: colors.info, icon: "eye-off" },
+  magnet: { bg: "#DB2777", icon: "magnet" },
 };
 
 export const PowerUpView = React.memo(function PowerUpView({

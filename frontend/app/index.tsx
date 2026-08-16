@@ -35,7 +35,7 @@ const HOME_BG =
 export default function Home() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { settings, setHaptics } = useSettings();
+  const { settings, setHaptics, setSound } = useSettings();
   const [showSettings, setShowSettings] = useState(false);
   const [best, setBest] = useState(0);
   const [lives, setLives] = useState(0);
@@ -128,8 +128,8 @@ export default function Home() {
           <Text style={styles.playText}>PLAY</Text>
         </Pressable>
         <Text style={styles.hint}>
-          Tap and keep tapping to fly · glide through coins, stars & power-ups ·
-          dodge the enemies
+          Tap for a small hop, hold for a big jump · grab coins, stars &
+          power-ups · dodge the enemies
         </Text>
       </View>
 
@@ -138,6 +138,7 @@ export default function Home() {
         settings={settings}
         onClose={() => setShowSettings(false)}
         onToggleHaptics={setHaptics}
+        onToggleSound={setSound}
         onReset={reset}
       />
     </View>

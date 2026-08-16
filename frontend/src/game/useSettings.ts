@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { storage } from "@/src/utils/storage";
-import { KEY_HAPTICS } from "./constants";
+import { KEY_HAPTICS, KEY_SOUND } from "./constants";
 
 export interface Settings {
   haptics: boolean;
+  sound: boolean;
 }
 
-const DEFAULTS: Settings = { haptics: true };
+const DEFAULTS: Settings = { haptics: true, sound: true };
 
 export function useSettings() {
   const [settings, setSettings] = useState<Settings>(DEFAULTS);
@@ -15,7 +16,8 @@ export function useSettings() {
   useEffect(() => {
     (async () => {
       const haptics = await storage.getItem<boolean>(KEY_HAPTICS, true);
-      setSettings({ haptics: haptics ?? true });
+      const sound = await storage.getItem<boolean>(KEY_SOUND, true);
+      setSettings({ haptics: haptics ?? true, sound: sound ?? true });
       setLoaded(true);
     })();
   }, []);
@@ -25,5 +27,10 @@ export function useSettings() {
     storage.setItem(KEY_HAPTICS, v);
   }, []);
 
-  return { settings, loaded, setHaptics };
+  const setSound = useCallback((v: boolean) => {
+    setSettings((s) => ({ ...s, sound: v }));
+    storage.setItem(KEY_SOUND, v);
+  }, []);
+
+  return { settings, loaded, setHaptics, setSound };
 }

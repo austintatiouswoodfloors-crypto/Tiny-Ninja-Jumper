@@ -13,6 +13,7 @@ import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as ScreenOrientation from "expo-screen-orientation";
+import { useAudioPlayer, setAudioModeAsync } from "expo-audio";
 
 import { colors, font, fontSize, radius, shadow, spacing } from "@/src/theme";
 import {
@@ -48,6 +49,7 @@ const POWER_LABEL = {
   grow: "GROW BIG!",
   invis: "INVISIBLE!",
   star: "STAR POWER!",
+  magnet: "COIN MAGNET!",
 } as const;
 
 export default function Game() {
@@ -57,7 +59,7 @@ export default function Game() {
   const { settings, loaded } = useSettings();
 
   const stateRef = useRef<GameState | null>(null);
-  const inputRef = useRef<Input>({ jumpQueued: false });
+  const inputRef = useRef<Input>({ jumpQueued: false, holding: false });
   const lastRef = useRef(0);
   const runningRef = useRef(false);
   const hapticsRef = useRef(true);
@@ -68,6 +70,67 @@ export default function Game() {
   const [best, setBest] = useState(0);
   const [lives, setLives] = useState(0);
   const [result, setResult] = useState({ coins: 0, isBest: false });
+
+  // Audio (original SFX + waltz loop).
+  const music = useAudioPlayer(require("@/assets/audio/music.wav"));
+  const sfxFlap = useAudioPlayer(require("@/assets/audio/flap.wav"));
+  const sfxCoin = useAudioPlayer(require("@/assets/audio/coin.wav"));
+  const sfxPower = useAudioPlayer(require("@/assets/audio/power.wav"));
+  const sfxStar = useAudioPlayer(require("@/assets/audio/star.wav"));
+  const sfxDie = useAudioPlayer(require("@/assets/audio/die.wav"));
+  const playersRef = useRef<Record<string, ReturnType<typeof useAudioPlayer>>>({});
+  const soundRef = useRef(true);
+
+  useEffect(() => {
+    soundRef.current = settings.sound;
+  }, [settings.sound]);
+
+  useEffect(() => {
+    sfxFlap.volume = 0.3;
+    sfxCoin.volume = 0.55;
+    sfxPower.volume = 0.6;
+    sfxStar.volume = 0.6;
+    sfxDie.volume = 0.7;
+    playersRef.current = {
+      jump: sfxFlap,
+      coin: sfxCoin,
+      power: sfxPower,
+      star: sfxStar,
+      die: sfxDie,
+    };
+  }, [sfxFlap, sfxCoin, sfxPower, sfxStar, sfxDie]);
+
+  const playSfx = useCallback((name: string) => {
+    if (!soundRef.current) return;
+    const p = playersRef.current[name];
+    if (p) {
+      try {
+        p.seekTo(0);
+        p.play();
+      } catch {
+        // ignore
+      }
+    }
+  }, []);
+
+  // Background music loop.
+  useEffect(() => {
+    setAudioModeAsync({ playsInSilentMode: true }).catch(() => {});
+    try {
+      music.loop = true;
+      music.volume = 0.4;
+      if (settings.sound) music.play();
+    } catch {
+      // ignore
+    }
+    return () => {
+      try {
+        music.pause();
+      } catch {
+        // ignore
+      }
+    };
+  }, [music, settings.sound]);
 
   useEffect(() => {
     hapticsRef.current = settings.haptics;
@@ -129,7 +192,13 @@ export default function Game() {
     step(s, dt, inputRef.current);
     for (const ev of s.events) {
       haptic(ev, hapticsRef.current);
-      if (ev === "life") gainLife();
+      if (ev === "life") {
+        gainLife();
+        playSfx("star");
+      } else if (ev === "coin") playSfx("coin");
+      else if (ev === "power") playSfx("power");
+      else if (ev === "die") playSfx("die");
+      else if (ev === "jump") playSfx("jump");
     }
     s.events.length = 0;
     setTick((n) => n + 1);
@@ -138,7 +207,7 @@ export default function Game() {
       persist(s);
       setScreen("dead");
     }
-  }, [persist, gainLife]);
+  }, [persist, gainLife, playSfx]);
 
   useEffect(() => {
     if (!loaded || W < 2 || H < 2) return;
@@ -157,7 +226,11 @@ export default function Game() {
   }, [loaded, W, H, screen, tick]);
 
   const doJump = () => {
+    inputRef.current.holding = true;
     inputRef.current.jumpQueued = true;
+  };
+  const releaseJump = () => {
+    inputRef.current.holding = false;
   };
   const pause = () => {
     haptic("tap", settings.haptics);
@@ -170,7 +243,7 @@ export default function Game() {
   const restart = () => {
     haptic("tap", settings.haptics);
     stateRef.current = createGame(W, H);
-    inputRef.current = { jumpQueued: false };
+    inputRef.current = { jumpQueued: false, holding: false };
     setScreen("playing");
   };
   const continueRun = async () => {
@@ -220,6 +293,8 @@ export default function Game() {
     const amp = idx === 0 ? 6 : 3; // emphasize beat 1 of the measure
     bob = -Math.sin(Math.PI * frac) * amp;
   }
+  const measurePos = (s.now % (WALTZ_BEAT_MS * 3)) / WALTZ_BEAT_MS;
+  const beatPulse = 1 - (measurePos - Math.floor(measurePos)); // 1 on beat -> 0
 
   const hillW = 260;
   const hillSpan = W + hillW;
@@ -265,9 +340,41 @@ export default function Game() {
         {s.powerups.map((pu) => (
           <PowerUpView key={pu.id} x={screenXOf(s, pu.wx)} y={pu.y} type={pu.type} />
         ))}
-        {s.enemies.map((e) => (
-          <EnemyView key={e.id} x={screenXOf(s, e.wx)} y={e.y} kind={e.kind} />
-        ))}
+        {s.enemies.map((e) => {
+          const dir = e.vx > 0 ? 1 : -1;
+          const distToBound = dir > 0 ? e.maxX - e.wx : e.wx - e.minX;
+          const t = distToBound < 60 ? 1 - distToBound / 60 : 0;
+          const wobble = t * Math.sin(s.now / 45) * 12;
+          return (
+            <EnemyView
+              key={e.id}
+              x={screenXOf(s, e.wx)}
+              y={e.y}
+              kind={e.kind}
+              wobble={wobble}
+            />
+          );
+        })}
+        {/* Waltz-beat sparkle trail behind the ninja */}
+        {[1, 2, 3].map((i) => {
+          const sz = 12 - 2 * i;
+          return (
+            <View
+              key={`trail-${i}`}
+              style={{
+                position: "absolute",
+                left: s.screenX - 16 * i - sz / 2,
+                top: s.ninja.y + 6 - sz / 2,
+                width: sz,
+                height: sz,
+                borderRadius: sz / 2,
+                backgroundColor: colors.brandSecondary,
+                opacity: (0.55 * beatPulse) / i,
+                pointerEvents: "none",
+              }}
+            />
+          );
+        })}
         <NinjaView
           x={s.screenX}
           y={s.ninja.y}
@@ -286,7 +393,8 @@ export default function Game() {
         <Pressable
           testID="jump-zone"
           style={StyleSheet.absoluteFill}
-          onPress={doJump}
+          onPressIn={doJump}
+          onPressOut={releaseJump}
         />
       )}
 
