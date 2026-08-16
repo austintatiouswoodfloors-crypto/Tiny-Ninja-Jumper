@@ -1,0 +1,50 @@
+{
+  "summary": "Frontend-only retest of TinyNinja horizontal side-scroller (post-pivot: JUMP ONLY controls, two platform tiers, three power-ups, stars->lives, Continue flow, coins-as-score). All core flows verified on mobile viewport 390x844: Home renders (home-best-score, home-lives-pill=0, home-play-button, home-settings-button) -> Settings modal opens with settings-haptics-switch/settings-reset-button/settings-done-button and closes cleanly -> PLAY navigates to /game (game-screen mounts) with HUD (pause-button, score-value + 3 star pips beneath, lives-hud=0) and jump-button/jump-zone -> Game LOOP runs (verified hands-off: score-value goes 0 -> 2 within ~3s with coins visibly rendered in the entity layer, coin sprites confirmed on-screen approaching ninja) -> Jump/double-jump respond to jump-button and jump-zone taps without crashing -> Natural game-over-overlay shows final coins, Best, Lives, retry-button, home-button; continue-button is correctly HIDDEN when lives=0 -> retry-button restarts a fresh run (game-screen active, score resets to 0) -> pause-button opens resume-button+pause-home-button overlay; resume-button returns to gameplay, pause-home-button returns to Home -> home-button on game-over returns to Home -> settings-reset-button zeroes Best and Lives on Home. No red-screen errors, no unhandled JS exceptions captured.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Return to Home from /game via router.replace('/')",
+        "issue": "After clicking home-button on game-over-overlay (or pause-home-button), the DOM contains TWO Home renders: document.querySelectorAll('[data-testid=\"home-play-button\"]').length === 2 and same for home-best-score. Visually correct (only one Home shown) and game-screen is 0 in DOM, so it's a duplicate mount of the '/' route (likely Expo Router web + useFocusEffect keeping the previous / route mounted while the game screen is torn down). Non-blocking for users but causes strict-mode Playwright/RTL locators to fail with 'resolved to 2 elements'.",
+        "affected_testIDs": ["home-best-score", "home-play-button", "home-settings-button", "home-lives-pill"]
+      }
+    ],
+    "design_issues": [],
+    "react_native_issues": [
+      {
+        "component": "game.tsx (Views with pointerEvents in style array)",
+        "issue": "Prior iteration_2 flagged 'props.pointerEvents is deprecated. Use style.pointerEvents' RN Web warnings. game.tsx uses style={[..., { pointerEvents: 'box-none' }]} / 'none' at lines 202, 224, 253, 283 which is the CORRECT modern usage; however older shadow* props still fire deprecation via ...shadow.card / ...shadow.soft spreads. Reference: /app/frontend/app/game.tsx and /app/frontend/src/theme (shadow tokens)."
+      },
+      {
+        "component": "theme shadow tokens (shadow.card / shadow.soft)",
+        "issue": "React Native Web deprecation warning: '\"shadow*\" style props are deprecated. Use \"boxShadow\"'. Fires from hudBtn/livesHud/card/playBtn/jumpBtn/iconBtn styles that spread ...shadow.card / ...shadow.soft. Reference: /app/frontend/src/theme, used in /app/frontend/app/index.tsx and /app/frontend/app/game.tsx."
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/test_reports/iteration_3.json",
+    "/app/test_reports/iteration_2.json",
+    "/app/test_reports/iteration_1.json"
+  ],
+  "action_items": [
+    "OPTIONAL: Investigate the duplicate Home mount after router.replace('/') from /game. Consider using router.dismissAll() / router.back() semantics, or ensure /game unmounts cleanly. Repro: PLAY -> die -> tap home-button on game-over-overlay -> inspect DOM: document.querySelectorAll('[data-testid=\"home-play-button\"]').length === 2. Users see the correct Home visually but this breaks strict-mode E2E locators and doubles React tree size.",
+    "OPTIONAL (carried over): Replace shadow* style tokens with boxShadow (or Platform.select) in /app/frontend/src/theme to silence RN Web deprecation warnings.",
+    "SOFT-VERIFY ONLY (per request): continue-button flow requires 3 star power-ups to earn a life. AsyncStorage on web is backed by IndexedDB (not localStorage), so seeding tn_lives via window.localStorage did NOT hydrate a life after reload. Confirmed by inspection of /app/frontend/src/utils/storage/index.web.ts (uses @react-native-async-storage/async-storage). Continue-button HIDDEN when lives=0 was verified; end-to-end 'spend a life and resume same run without resetting coins' could not be automated. Recommend a targeted engine-level unit test on engine.revive() to lock in behavior."
+  ],
+  "critical_code_review_comments": [
+    "engine.ts createGame(): initial safe ground is [-W, W*1.4] with no coins in the safe zone; first coins appear only in generated segments beyond W*1.4. At RUN_START=260 px/s the ninja reaches the first pit around t~=2.1s, which means without a well-timed first jump the score can remain 0 until natural death. Automation must jump the FIRST pit to observe score>0; verified score reaches 2 by t=3s under hands-off physics when the RNG places a landable next platform.",
+    "engine.ts step() input handling: input.jumpQueued is consumed each frame regardless of state. If the user taps repeatedly while grounded transitions occur, the queue is not buffered; consider a small jump-buffer (e.g., 100ms) so a tap slightly before landing still counts. Minor UX nit.",
+    "game.tsx tick(): dt clamped to 1/20 s, s.now = Date.now() before step -- good. setInterval(1000/60) driving with clock()-based dt is robust to tab throttling.",
+    "game.tsx return-to-home uses router.replace('/'). Combined with useFocusEffect on Home that refetches best/lives, may explain the duplicate Home in DOM. Consider router.back() when the stack has an entry, or double-check Expo Router SPA behavior.",
+    "engine.ts revive(): extends ground under ninja by [worldX-140, worldX+520] and grants 2.6s invincibility -- safe and testable. But if the ninja died from a pit fall (y > H), n.y is teleported back onto the ground correctly. Good.",
+    "index.tsx: HOME_BG is a remote Unsplash URL -- offline cold-start will show gradient only. Consider bundling a local fallback."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "N/A (skipped)", "frontend": "~95%" },
+  "seed_data_creation": "None. Attempted to seed AsyncStorage tn_lives=3 via window.localStorage; ineffective because @react-native-async-storage/async-storage web uses IndexedDB, not localStorage. Continue flow soft-verified only (button correctly hidden when lives=0).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Core game loop, jump/double-jump, coin collection, game-over overlay, retry, pause/resume, pause-home, home-return, and reset-persistence are all functional on the /game route. Coins do render and are collected — hands-off run reaches score 2 in ~3s (RNG dependent). Continue-with-life flow could not be fully automated because AsyncStorage on web is IndexedDB-backed; only the button-visibility gating (lives==0 -> hidden) was verified. One integration nit: pressing home-button/pause-home-button leaves a duplicate Home rendered in the DOM (games=0, homes=2), likely an Expo Router web quirk with router.replace('/'). Deprecation warnings for shadow* props remain from iteration_2.",
+  "rca_of_issue": "N/A -- no CRITICAL bugs found in this iteration. The perceived 'score stuck at 0' during rapid sampling was actually the ninja dying at the first pit within ~1-2s (before reaching any coin rows). When automation lets the game run 3+ seconds and the RNG places a landable segment, score demonstrably increments (0 -> 2 verified). Coins are visible in-frame prior to collection (screenshots confirm coin sprites approaching the ninja)."
+}

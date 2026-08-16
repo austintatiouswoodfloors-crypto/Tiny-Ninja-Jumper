@@ -1,0 +1,66 @@
+{
+  "summary": "Frontend-only test of TinyNinja jumper. Home screen, Settings modal, PLAY navigation, HUD elements, Pause overlay + resume + home-from-pause all render correctly with correct testIDs. CRITICAL BUG: Game loop appears to not progress on web preview - score-value stays at 0 for 40+ seconds, ninja is NOT rendered on-screen, and game-over never triggers naturally. Only two of three toggle groups (haptics + control mode) persist. Also detected React Native Web deprecation warnings (props.pointerEvents, shadow*). Deprecated packages detected: none (expo-av/barcode-scanner/background-fetch not used). Missing tests: could not naturally reach Game Over so retry/home buttons on game-over overlay verified only for existence at DOM registration - not runtime because overlay never appeared.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "game.tsx - Game engine loop / rendering",
+        "issue": "Score never increases and ninja is not visible on screen. Waited 40+ seconds on /game with no touch input: score-value remained '0' for the entire duration and no game-over-overlay ever appeared. Screenshots show platforms/coins rendered but the Ninja sprite is missing entirely. Suggests either (a) raf loop stops after a few frames, (b) setState in loop is not causing a re-render of entity positions, or (c) initial ninja x/y is off-screen (Dimensions on web might mismatch), preventing climb increments. Reference: /app/frontend/app/game.tsx lines 47, 75-97 (loop uses stateRef mutation + setTick) and /app/frontend/src/game/engine.ts:159 (getScore).",
+        "testID": "score-value",
+        "priority": "CRITICAL"
+      },
+      {
+        "component": "game.tsx - Ninja not rendered",
+        "issue": "NinjaView is not visible in the /game viewport during the whole run. Since state uses stateRef.current (mutation) and children read s.ninja.x/y on each setTick, if setTick doesn't force enough re-renders or ninja is placed at bad coords, it never appears. Reference: /app/frontend/app/game.tsx:195-201.",
+        "testID": "game-screen",
+        "priority": "CRITICAL"
+      }
+    ],
+    "integration_issues": [
+      {
+        "flow": "Game Over -> persistence -> Home Best/Coins",
+        "issue": "Because game never dies naturally (see game-loop bug), Best score never increments from 0 and total coins never increment. On-device persistence flow (KEY_BEST/KEY_COINS via storage) could not be validated end-to-end.",
+        "affected_testIDs": ["home-best-score", "home-coins-pill", "game-over-overlay", "retry-button", "home-button"]
+      }
+    ],
+    "design_issues": [
+      {
+        "screen": "Game HUD",
+        "issues": [
+          "A platform overlaps the pause-button at top-left when it spawns near the top of the viewport (visible in screenshots). Consider constraining spawn X to avoid the HUD zone or elevating HUD z-index above entity layer (entity layer is drawn before HUD in JSX, so this should be fine, but rendering shows overlap because they share space)."
+        ]
+      }
+    ],
+    "react_native_issues": [
+      {
+        "component": "game.tsx (entity layer wrapper)",
+        "issue": "React Native Web warning: 'props.pointerEvents is deprecated. Use style.pointerEvents'. Two Views set pointerEvents as a prop. Reference: /app/frontend/app/game.tsx:182 and /app/frontend/app/game.tsx:224 (and possibly :239)."
+      },
+      {
+        "component": "theme shadow tokens",
+        "issue": "React Native Web warning: '\"shadow*\" style props are deprecated. Use \"boxShadow\"'. Fired by several styled elements using shadow.card / shadow.soft. Reference: /app/frontend/src/theme (shadow tokens applied in app/index.tsx:214, app/game.tsx (hudBtn, coinHud, card))."
+      }
+    ]
+  },
+  "test_report_links": ["/app/test_reports/iteration_1.json"],
+  "action_items": [
+    "CRITICAL: Debug why score-value stays 0 and ninja does not render on web. Suggested checks: (1) log s.ninja.x/y and s.climb inside loop; (2) verify Dimensions.get('window') returns non-zero W/H before createGame() executes (currently W/H are captured at module load — replace with useWindowDimensions or lazy initialisation inside useEffect); (3) confirm the raf loop still runs after first frame (StrictMode double-mount may call stopLoop leaving runningRef=false — startLoop guard is only against re-entry, but if a cleanup calls stopLoop after start, the loop stops). Consider re-initialising stateRef and starting loop inside a useEffect that runs after layout.",
+    "Fix persistence-related side-effects blocked by the loop bug — retest end-to-end once loop runs.",
+    "Migrate `pointerEvents` prop usages to `style.pointerEvents` in game.tsx.",
+    "Migrate `shadow*` style tokens to `boxShadow` in the theme (or provide platform-conditional style) to remove RN Web deprecation warnings."
+  ],
+  "critical_code_review_comments": [
+    "game.tsx: Dimensions.get('window') is called at module scope; on RN Web the reported dimensions may not reflect the actual viewport when the component mounts inside the preview iframe. Use useWindowDimensions() and create the game state inside useEffect after loaded=true.",
+    "game.tsx useEffect at line 112: dependency is only [loaded] but startLoop/stopLoop are useCallback-created; the ESLint suppression could hide a stale-closure bug where a StrictMode double-invocation cancels the freshly started raf. Guard startLoop so it doesn't double-start AND make stopLoop idempotent (already ok), but ensure cleanup order works with StrictMode.",
+    "engine.ts step(): coin/powerup collision uses NINJA_W*0.35 hitbox — fine, but coin hit test still passes when ninja not yet moved; acceptable.",
+    "index.tsx line 32: HOME_BG uses a remote Unsplash URL — offline first launch will show blank background; consider bundling a local asset.",
+    "SettingsSheet.tsx: no unmount animation persistence issue observed, but Modal doesn't set statusBarTranslucent for Android — minor."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "N/A (skipped)", "frontend": "~55%" },
+  "seed_data_creation": "None — pure on-device app.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Focus first on verifying that after main agent's fix the score-value increments over time on /game without touch and that the ninja is visible. Once that works, verify natural game-over -> retry (game-screen appears again with score=0) -> home flow, and confirm Best/Coins on Home update after a run. All Home + Settings + Pause flows already validated in iteration_1.",
+  "rca_of_issue": "Reproduction: open https://mobile-app-clone-24.preview.emergentagent.com/game in a 375x667 viewport with no interaction. Expected: score-value increments as the ninja bounces & camera scrolls (climb / 10). Observed: score-value stays 0 for 40+ seconds; no NinjaView pixels are visible in screenshots though platforms and coins render. Most likely causes (in priority order): (1) Dimensions.get('window') returns stale/zero size at module load causing createGame(W,H) to place ninja off-screen; (2) React 18 StrictMode double-invokes the boot useEffect and the cleanup stopLoop cancels the loop scheduled by the second startLoop; (3) setTick re-render is starving because the callback identity of loop depends on persist which may change. Mitigation: (a) create GameState lazily inside useEffect once dimensions are known via useWindowDimensions(); (b) make the boot effect resilient to StrictMode by using a mounted flag and only stopping the loop on final unmount; (c) call cancelAnimationFrame(rafRef.current) before starting a new one in startLoop for extra safety."
+}

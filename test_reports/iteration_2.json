@@ -1,0 +1,46 @@
+{
+  "summary": "Frontend-only retest of TinyNinja horizontal side-scroller after game-loop pivot to setInterval(1000/60). CRITICAL bug from iteration_1 is FIXED: score-value increments (0 -> 54 in 3s, and independently 2 -> 64 during input session), Ninja renders on /game, and game-over triggers naturally on pit/enemy contact. Verified end-to-end: Home (title, best-score, coins pill, play, settings buttons) -> Settings modal (haptics switch + touch/tilt control mode) with selections persisting on re-open -> PLAY -> /game (game-screen, HUD: pause/score/coins, controls: jump/attack) -> game loop runs -> jump-button and attack-button respond without crashes -> natural game-over-overlay with final score, Best, Coins, retry-button and home-button -> retry restarts a fresh run (game-screen active, score resets and starts climbing again) -> pause -> resume works, pause-home-button returns Home -> Persistence: Best score updated on Home after run (Best 64 shown). No red-screen errors, no unhandled JS exceptions captured. Combo not verifiable via automation (ninja dies before reaching enemy clusters with a slashing attack window) but attacking near enemies does not crash. Residual React Native Web deprecation warnings from iteration_1 still apply (pointerEvents prop, shadow* style props).",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Game HUD vs. entity layer",
+        "issues": [
+          "Occasional visual overlap between spawned platforms/coins and top HUD (pause-button, score) when entities are near the top of the viewport, since entity layer and HUD share the same absolute-fill space. Non-blocking (HUD is drawn on top and interactable), purely cosmetic."
+        ]
+      }
+    ],
+    "react_native_issues": [
+      {
+        "component": "game.tsx (Views with pointerEvents prop)",
+        "issue": "React Native Web deprecation: 'props.pointerEvents is deprecated. Use style.pointerEvents'. Reference: /app/frontend/app/game.tsx:170, /app/frontend/app/game.tsx:187, /app/frontend/app/game.tsx:218 (via style array with pointerEvents key inside style is correct; standalone pointerEvents prop uses should be migrated). Also check :234, :242, :253."
+      },
+      {
+        "component": "theme shadow tokens applied via shadow.card / shadow.soft",
+        "issue": "React Native Web deprecation: '\"shadow*\" style props are deprecated. Use \"boxShadow\"'. Fires from hudBtn/coinHud/card/playBtn/ctrlBtn styles that spread ...shadow.card / ...shadow.soft. Reference: /app/frontend/src/theme (shadow tokens) and usages in /app/frontend/app/index.tsx and /app/frontend/app/game.tsx."
+      }
+    ]
+  },
+  "test_report_links": ["/app/test_reports/iteration_2.json", "/app/test_reports/iteration_1.json"],
+  "action_items": [
+    "OPTIONAL: Migrate remaining `pointerEvents` prop usages to `style={{ pointerEvents: '...' }}` in /app/frontend/app/game.tsx to remove RN Web warnings.",
+    "OPTIONAL: Replace `shadow*` tokens with `boxShadow` (or platform-conditional style) in /app/frontend/src/theme to remove RN Web warnings.",
+    "OPTIONAL: The Tilt control-mode setting is not currently wired to the horizontal game (buttons drive it) — per main-agent note this is intentional, but consider hiding the Tilt option or labeling it as N/A to avoid user confusion."
+  ],
+  "critical_code_review_comments": [
+    "game.tsx: setInterval(tick, 1000/60) is a solid fallback for the web preview where rAF is throttled/paused in the headless capture. On real devices this is still fine; rAF-based alternative could be reintroduced behind Platform.OS check if needed later.",
+    "game.tsx tick(): dt is clamped to 1/20 which prevents huge steps after tab-throttling — good. lastRef reset to 0 on effect setup avoids initial huge dt — good.",
+    "engine.ts generateAhead(): first pit appears after the safe start segment (x1 = W*1.4); with RUN_START 270 the ninja reaches it in ~2 seconds. Without any jump the first death is unavoidable within ~3-4s. This is intentional but means CI/automation runs must tap jump aggressively to reach enemies/combos.",
+    "engine.ts step(): stomp logic requires !grounded && vy>0 && feet<=e.y — reasonable but the enemy `y` uses center; consider comparing feet to (e.y - ENEMY_H/2) for a cleaner top-of-enemy check.",
+    "index.tsx: HOME_BG remote Unsplash URL — offline first launch will show a blank/gradient background. Consider bundling a local asset for a smoother cold start."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "N/A (skipped)", "frontend": "~95%" },
+  "seed_data_creation": "None — pure on-device app.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Core game loop, controls, game-over, retry, pause, home navigation, and Best/Coins persistence are all functional on the web preview. Remaining polish items are RN Web deprecation warnings (pointerEvents, shadow*) and a UX decision about whether to expose the Tilt option on this horizontal build. Combo multiplier UX (combo-text) exists in code and does not crash under rapid attacks, but is difficult to trigger reliably via headless automation; recommend manual playtest or a targeted engine-level unit test if strict verification is required.",
+  "rca_of_issue": "N/A — iteration_1 CRITICAL bug (frozen game loop) is confirmed fixed by the switch to setInterval(1000/60) and useWindowDimensions-based lazy init. Verified in two independent runs: (1) hands-off — score 0 -> 54 in 3s, natural death; (2) with rapid jump/attack input — score 2 -> 64, natural death at iter 9, retry restarts a fresh run, home returns to Home with Best updated to 64."
+}

@@ -1,0 +1,157 @@
+{
+  "app_name": "TinyNinja Jumper",
+  "personality": "4 Tactile / Playful LIGHT (Daytime Bamboo Forest Theme)",
+  "personality_one_liner": "A bouncy, tactile, and highly responsive arcade jumper featuring crisp flat vector graphics, warm bamboo greens, and bouncy micro-interactions.",
+  "color": {
+    "surface": "#F4F9F4",
+    "onSurface": "#1A231F",
+    "surfaceSecondary": "#E1EFE1",
+    "onSurfaceSecondary": "#1A231F",
+    "surfaceTertiary": "#C5DFC5",
+    "onSurfaceTertiary": "#1A231F",
+    "surfaceInverse": "#1F2924",
+    "onSurfaceInverse": "#F4F9F4",
+    "brand": "#22C55E",
+    "brandPrimary": "#16A34A",
+    "onBrandPrimary": "#FFFFFF",
+    "brandSecondary": "#4ADE80",
+    "onBrandSecondary": "#064E3B",
+    "brandTertiary": "#DCFCE7",
+    "onBrandTertiary": "#14532D",
+    "success": "#10B981",
+    "onSuccess": "#022C22",
+    "warning": "#F59E0B",
+    "onWarning": "#451A03",
+    "error": "#EF4444",
+    "onError": "#FEF2F2",
+    "info": "#14B8A6",
+    "onInfo": "#042F2E",
+    "border": "#D1E5D1",
+    "borderStrong": "#86EFAC",
+    "divider": "#E1EFE1"
+  },
+  "typography": {
+    "displayFontFamily": "Fredoka",
+    "textFontFamily": "Nunito",
+    "scale": {
+      "sm": 12,
+      "base": 14,
+      "lg": 16,
+      "xl": 20,
+      "2xl": 24,
+      "3xl": 48
+    }
+  },
+  "spacing": {
+    "rule": "Use generous padding for tactile UI elements. Oversized tap areas for menus. Keep HUD elements pinned to the very edges using SafeArea to maximize gameplay visibility.",
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "3xl": 48
+  },
+  "radius_tokens": {
+    "sm": 6,
+    "md": 12,
+    "lg": 20,
+    "pill": 999
+  },
+  "shadow_tier": "2",
+  "navigation": "stack_only",
+  "icon_set": "Phosphor",
+  "glassmorphism": {
+    "enabled": "true",
+    "do's": [
+      "Use heavy frosted glass for the Game Over overlay and Pause menu overlay, ensuring the paused game behind is heavily blurred but visible.",
+      "Use glass for the sticky HUD at the top of the Gameplay screen if needed, though transparent is preferred for pure arcade feels."
+    ],
+    "dont's": [
+      "Do not use glass for the platforms, coins, or enemies. Game entities must remain flat, opaque vectors."
+    ]
+  },
+  "platform_libraries": {
+    "glass": {
+      "ios": "expo-glass-effect",
+      "android": "expo-blur",
+      "low_end_android_fallback": "solid surfaceInverse at 90% opacity"
+    },
+    "image": "expo-image",
+    "blur": "expo-blur",
+    "bottom_sheet": "@gorhom/bottom-sheet",
+    "animation": "react-native-reanimated",
+    "gesture": "react-native-gesture-handler"
+  },
+  "screens": [
+    {
+      "name": "Home",
+      "purpose": "Main entry point, hyping the player to start jumping.",
+      "states": {
+        "loading": "Brand color spinner",
+        "empty": "N/A",
+        "error": "N/A"
+      },
+      "layout": "Full-bleed background image with vertical gradient scrim. Top HUD: Settings (Left), Total Coins (Right). Center: Huge Game Title in Fredoka, bouncing Ninja vector. Bottom 1/3: Oversized Pill 'PLAY' button (brandPrimary). SafeArea respected."
+    },
+    {
+      "name": "Gameplay",
+      "purpose": "The core endless jumping canvas.",
+      "states": {
+        "loading": "N/A",
+        "empty": "N/A",
+        "error": "N/A"
+      },
+      "layout": "Dynamic vertical canvas. Minimalist HUD pinned to absolute top (SafeArea): Current Score centered (huge, Fredoka), Pause button top-left, Coin count top-right. Keep center completely clear of UI chrome. Platforms, ninja, and enemies are drawn as crisp flat vectors."
+    },
+    {
+      "name": "Game Over",
+      "purpose": "Immediate replay loop and score summary.",
+      "states": {
+        "loading": "N/A",
+        "empty": "N/A",
+        "error": "N/A"
+      },
+      "layout": "Renders as an absolute overlay on top of the paused/dead Gameplay screen. Heavy glassmorphism background. Center Card (surface): 'GAME OVER' title, Final Score prominently displayed, Best Score, Coins Earned. Bottom of card: Two side-by-side oversized pill buttons: 'RETRY' (brandPrimary) and 'HOME' (surfaceSecondary)."
+    },
+    {
+      "name": "Settings",
+      "purpose": "Game configuration.",
+      "states": {
+        "loading": "N/A",
+        "empty": "N/A",
+        "error": "N/A"
+      },
+      "layout": "Triggered via gorhom bottom-sheet from Home. Tactile list rows with Phosphor icons inside brandTertiary tinted squares. Toggles for Haptics and Control Mode (Tilt/Touch). Large drag handle."
+    }
+  ],
+  "game_entities": {
+    "ninja": "Flat rounded square body (Hex: #1F2924) with a #F4F9F4 eye slit and a #EF4444 trailing headband. Bouncy scale animations on jump.",
+    "platform": "Flat pill shape (Hex: #16A34A). Simple clean vector, no outlines.",
+    "coin": "Flat circle (Hex: #F59E0B) with a slightly lighter inner circle (#FBBF24) and subtle pulsing animation.",
+    "enemy": "Sharp spiked square or hazard star (Hex: #EF4444) with an angry #B91C1C inner detail.",
+    "power_up_grow": "Emerald green (#10B981) pill with a bold white up-arrow."
+  },
+  "images": {
+    "home_background": {
+      "url": "https://images.unsplash.com/photo-1676206895862-27adf9e79f8c?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NzV8MHwxfHNlYXJjaHwxfHxiYW1ib28lMjBmb3Jlc3QlMjBza3klMjBiYWNrZ3JvdW5kfGVufDB8fHx8MTc4Njg0NjQ1OHww&ixlib=rb-4.1.0&q=85",
+      "alt": "Bamboo forest canopy looking up at the sky"
+    }
+  },
+  "haptics": {
+    "jump": "impactLight (triggered on every platform bounce)",
+    "collect_coin": "impactMedium",
+    "power_up": "notificationSuccess",
+    "enemy_hit": "notificationError",
+    "button_press": "selection"
+  },
+  "instructions_to_main_agent": [
+    "Strictly follow the Tactile / Playful (4) personality: use oversized pill buttons, bouncy overshoot spring animations (react-native-reanimated), and generous spacing.",
+    "For the Gameplay screen, game entities (Ninja, Platforms, Coins, Enemies) MUST be rendered as crisp flat vectors using react-native-svg, Expo Skia, or stylized basic Views. Use the exact hex colors defined in the 'game_entities' block.",
+    "No indigo, purple, violet, or navy colors anywhere. We are using a Daylight Bamboo Forest theme (warm greens, ambers, charcoal, crimson red).",
+    "Game Over screen must be a frosted glass overlay directly over the gameplay, maintaining context of where the player died.",
+    "Ensure a 3-stop vertical gradient scrim (transparent to surfaceInverse) is placed over the home_background image before overlaying text.",
+    "Cap typography weight at 500 for Fredoka and Nunito. Hierarchy is achieved entirely through size (e.g., 3xl for scores, xl for primary buttons).",
+    "Implement the specified haptic map for all game events to guarantee a tactile feel, with an option in the Settings sheet to disable them."
+  ]
+}
