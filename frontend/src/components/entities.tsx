@@ -147,6 +147,8 @@ export const NinjaView = React.memo(function NinjaView({
   powered,
   invisible,
   spin,
+  phase,
+  bob,
 }: {
   x: number;
   y: number;
@@ -154,6 +156,8 @@ export const NinjaView = React.memo(function NinjaView({
   powered: boolean;
   invisible: boolean;
   spin: number;
+  phase: number;
+  bob: number;
 }) {
   const scale = powered ? 1.5 : 1;
   const w = NINJA_W * scale;
@@ -178,11 +182,11 @@ export const NinjaView = React.memo(function NinjaView({
           left: x - (w * 60) / 52 / 2,
           top: y - h / 2,
           opacity: invisible ? 0.4 : 1,
-          transform: [{ rotate: `${spin}deg` }],
+          transform: [{ translateY: bob }, { rotate: `${spin}deg` }],
           pointerEvents: "none",
         }}
       >
-        <Ninja size={h} pose={pose} powered={powered} />
+        <Ninja size={h} pose={pose} powered={powered} phase={phase} />
       </View>
     </>
   );

@@ -37,7 +37,7 @@ import {
 import { haptic } from "@/src/game/haptics";
 import { useSettings } from "@/src/game/useSettings";
 import { storage } from "@/src/utils/storage";
-import { KEY_BEST, KEY_LIVES, STARS_PER_LIFE } from "@/src/game/constants";
+import { KEY_BEST, KEY_LIVES, STARS_PER_LIFE, WALTZ_BEAT_MS } from "@/src/game/constants";
 
 type Screen = "playing" | "paused" | "dead";
 
@@ -210,6 +210,17 @@ export default function Game() {
   const starActive = s.now < s.starUntil;
   const spin = starActive ? Math.floor((s.now / 2) % 360) : 0;
 
+  // Waltz-tempo (3/4) leg animation + body bob.
+  const legPhase = (s.now / WALTZ_BEAT_MS) * Math.PI * 2;
+  let bob = 0;
+  if (s.ninja.grounded) {
+    const beat = (s.now % (WALTZ_BEAT_MS * 3)) / WALTZ_BEAT_MS; // 0..3
+    const idx = Math.floor(beat);
+    const frac = beat - idx;
+    const amp = idx === 0 ? 6 : 3; // emphasize beat 1 of the measure
+    bob = -Math.sin(Math.PI * frac) * amp;
+  }
+
   const hillW = 260;
   const hillSpan = W + hillW;
   const hillOffset = -((s.ninja.worldX * 0.25) % hillSpan);
@@ -264,6 +275,8 @@ export default function Game() {
           powered={powered}
           invisible={invisible}
           spin={spin}
+          phase={legPhase}
+          bob={bob}
         />
       </View>
 

@@ -48,6 +48,8 @@ export interface Enemy {
   wx: number;
   y: number;
   vx: number;
+  minX: number; // patrol bounds (platform edges)
+  maxX: number;
   kind: EnemyKind;
   by: number; // base y (for flyer bob)
   ph: number; // phase
@@ -119,7 +121,15 @@ export function activePower(s: GameState): PowerType | null {
   return null;
 }
 
-function spawnEnemy(s: GameState, wx: number, kind: EnemyKind) {
+function spawnEnemy(
+  s: GameState,
+  wx: number,
+  kind: EnemyKind,
+  minX: number,
+  maxX: number,
+) {
+  const speed = 45 + Math.random() * 40;
+  const dir = Math.random() < 0.5 ? -1 : 1;
   if (kind === "flyer") {
     const by = s.groundTopY - (88 + Math.random() * 22);
     s.enemies.push({
@@ -128,13 +138,12 @@ function spawnEnemy(s: GameState, wx: number, kind: EnemyKind) {
       y: by,
       by,
       ph: Math.random() * Math.PI * 2,
-      vx: -(12 + Math.random() * 14),
+      vx: dir * speed,
+      minX,
+      maxX,
       kind,
       passed: false,
     });
-  } else if (kind === "spiker") {
-    const y = s.groundTopY - ENEMY_H / 2;
-    s.enemies.push({ id: s.nextId++, wx, y, by: y, ph: 0, vx: 0, kind, passed: false });
   } else {
     const y = s.groundTopY - ENEMY_H / 2;
     s.enemies.push({
@@ -143,7 +152,9 @@ function spawnEnemy(s: GameState, wx: number, kind: EnemyKind) {
       y,
       by: y,
       ph: 0,
-      vx: -(6 + Math.random() * 10),
+      vx: dir * speed,
+      minX,
+      maxX,
       kind,
       passed: false,
     });
@@ -214,7 +225,7 @@ function generateAhead(s: GameState) {
     if (chance(enemyChance)) {
       const wx = rand(x0 + 70, x1 - 60);
       if (wx - s.lastEnemyX >= 620) {
-        spawnEnemy(s, wx, weightedKind());
+        spawnEnemy(s, wx, weightedKind(), x0 + 24, x1 - 24);
         s.lastEnemyX = wx;
         clearCollectiblesNear(s, wx, 48);
       }
@@ -369,7 +380,15 @@ export function step(s: GameState, dt: number, input: Input) {
   // Enemies.
   for (let i = s.enemies.length - 1; i >= 0; i--) {
     const e = s.enemies[i];
+    // Pace back and forth across the platform.
     e.wx += e.vx * dt;
+    if (e.wx <= e.minX) {
+      e.wx = e.minX;
+      e.vx = Math.abs(e.vx);
+    } else if (e.wx >= e.maxX) {
+      e.wx = e.maxX;
+      e.vx = -Math.abs(e.vx);
+    }
     if (e.kind === "flyer") e.y = e.by + Math.sin(s.now / 300 + e.ph) * 16;
     const ex = screenXOf(s, e.wx);
     if (ex < -ENEMY_W || e.wx < n.worldX - s.W) {

@@ -49,6 +49,11 @@ Build a mobile app "identical to" the uploaded TinyNinja iOS game (.ipa). After 
 ## Controls
 - Tap anywhere = flap (infinite). Tap the pause button (top-left) to pause.
 
+## Animation & Motion (2026-06)
+- [x] Ninja **legs animate** with an alternating stride driven by a time phase.
+- [x] **Waltz tempo (3/4)** body bob (150 bpm / 400ms per beat), emphasizing beat 1 of each measure, while grounded.
+- [x] Enemies **pace back and forth** across their own platform (bounce at the platform edges); flyers also bob vertically.
+
 ## Known Notes
 - Haptics only fire on real devices (not web/Expo Go web preview).
 - Continue-with-life flow verified by gating + code review; end-to-end automation blocked by RNG (needs 3 stars).

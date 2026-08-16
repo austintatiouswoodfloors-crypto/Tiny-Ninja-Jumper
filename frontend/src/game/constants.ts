@@ -19,6 +19,9 @@ export const INVIS_MS = 6000;
 export const STAR_MS = 2800;
 export const STARS_PER_LIFE = 3;
 
+// Animation cadence: 3/4 waltz feel (150 bpm -> 400ms per beat).
+export const WALTZ_BEAT_MS = 400;
+
 export const COIN_R = 13;
 export const ENEMY_W = 40;
 export const ENEMY_H = 46;
