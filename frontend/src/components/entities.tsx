@@ -10,8 +10,9 @@ import {
   NINJA_W,
   POWER_S,
 } from "@/src/game/constants";
-import type { Pose, PowerType } from "@/src/game/engine";
+import type { Pose, PowerType, EnemyKind } from "@/src/game/engine";
 import { Ninja } from "./Ninja";
+import { Enemy } from "./Enemy";
 
 const PLATFORM_H = 20;
 
@@ -88,17 +89,22 @@ export const CoinView = React.memo(function CoinView({
 export const EnemyView = React.memo(function EnemyView({
   x,
   y,
+  kind,
 }: {
   x: number;
   y: number;
+  kind: EnemyKind;
 }) {
   return (
-    <View style={[styles.enemy, { left: x - ENEMY_W / 2, top: y - ENEMY_H / 2 }]}>
-      <View style={styles.enemyInner} />
-      <View style={styles.enemyEyes}>
-        <View style={styles.enemyEye} />
-        <View style={styles.enemyEye} />
-      </View>
+    <View
+      style={{
+        position: "absolute",
+        left: x - ENEMY_W / 2 - (kind === "flyer" ? 10 : 0),
+        top: y - ENEMY_H / 2,
+        pointerEvents: "none",
+      }}
+    >
+      <Enemy kind={kind} />
     </View>
   );
 });
@@ -140,14 +146,16 @@ export const NinjaView = React.memo(function NinjaView({
   pose,
   powered,
   invisible,
+  spin,
 }: {
   x: number;
   y: number;
   pose: Pose;
   powered: boolean;
   invisible: boolean;
+  spin: number;
 }) {
-  const scale = powered ? 1.25 : 1;
+  const scale = powered ? 1.5 : 1;
   const w = NINJA_W * scale;
   const h = NINJA_H * scale;
   return (
@@ -170,6 +178,7 @@ export const NinjaView = React.memo(function NinjaView({
           left: x - (w * 60) / 52 / 2,
           top: y - h / 2,
           opacity: invisible ? 0.4 : 1,
+          transform: [{ rotate: `${spin}deg` }],
           pointerEvents: "none",
         }}
       >

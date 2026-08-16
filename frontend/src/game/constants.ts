@@ -3,16 +3,16 @@ export const NINJA_W = 40;
 export const NINJA_H = 52;
 export const NINJA_SCREEN_FACTOR = 0.26; // ninja x = W * this
 
-export const GRAVITY = 2600; // px/s^2
-export const JUMP_V = 1080; // jump velocity (px/s)
+export const GRAVITY = 1700; // px/s^2 (floaty, slow, forgiving)
+export const JUMP_V = 760; // jump velocity (px/s)
 export const MAX_JUMPS = 2; // double jump
 
-export const RUN_START = 260; // world scroll speed px/s
-export const RUN_MAX = 560;
-export const RUN_ACCEL = 5;
+export const RUN_START = 110; // world scroll speed px/s (very relaxed)
+export const RUN_MAX = 210;
+export const RUN_ACCEL = 1.5;
 
 export const GROUND_FACTOR = 0.78; // ground surface as fraction of H
-export const UPPER_OFFSET = 155; // second platform tier height above ground
+export const UPPER_OFFSET = 130; // second platform tier height above ground
 
 export const GROW_MS = 6500;
 export const INVIS_MS = 6000;

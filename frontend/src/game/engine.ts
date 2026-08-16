@@ -11,7 +11,6 @@ import {
   GROW_MS,
   INVIS_MS,
   JUMP_V,
-  MAX_JUMPS,
   NINJA_H,
   NINJA_SCREEN_FACTOR,
   NINJA_W,
@@ -27,6 +26,7 @@ import {
 export type GameStatus = "playing" | "dead";
 export type Pose = "run" | "jump";
 export type PowerType = "grow" | "star" | "invis";
+export type EnemyKind = "walker" | "spiker" | "flyer";
 
 export interface Segment {
   x0: number;
@@ -48,6 +48,10 @@ export interface Enemy {
   wx: number;
   y: number;
   vx: number;
+  kind: EnemyKind;
+  by: number; // base y (for flyer bob)
+  ph: number; // phase
+  passed: boolean; // already passed through while invisible
 }
 export interface PowerUp {
   id: number;
@@ -80,7 +84,9 @@ export interface GameState {
   stars: number;
   growUntil: number;
   invisUntil: number;
+  starUntil: number;
   invUntil: number;
+  lastEnemyX: number;
   now: number;
   status: GameStatus;
   nextId: number;
@@ -108,82 +114,110 @@ export function isInvincible(s: GameState): boolean {
 }
 export function activePower(s: GameState): PowerType | null {
   if (s.now < s.growUntil) return "grow";
+  if (s.now < s.starUntil) return "star";
   if (s.now < s.invisUntil) return "invis";
-  if (s.now < s.invUntil) return "star";
   return null;
 }
 
-function pickPower(): PowerType {
+function spawnEnemy(s: GameState, wx: number, kind: EnemyKind) {
+  if (kind === "flyer") {
+    const by = s.groundTopY - (88 + Math.random() * 22);
+    s.enemies.push({
+      id: s.nextId++,
+      wx,
+      y: by,
+      by,
+      ph: Math.random() * Math.PI * 2,
+      vx: -(12 + Math.random() * 14),
+      kind,
+      passed: false,
+    });
+  } else if (kind === "spiker") {
+    const y = s.groundTopY - ENEMY_H / 2;
+    s.enemies.push({ id: s.nextId++, wx, y, by: y, ph: 0, vx: 0, kind, passed: false });
+  } else {
+    const y = s.groundTopY - ENEMY_H / 2;
+    s.enemies.push({
+      id: s.nextId++,
+      wx,
+      y,
+      by: y,
+      ph: 0,
+      vx: -(6 + Math.random() * 10),
+      kind,
+      passed: false,
+    });
+  }
+}
+
+// Remove any collectibles sitting on top of an enemy so everything on
+// screen stays fairly reachable (beginner-friendly).
+function clearCollectiblesNear(s: GameState, wx: number, r: number) {
+  s.coins = s.coins.filter((c) => Math.abs(c.wx - wx) > r);
+  s.powerups = s.powerups.filter((p) => Math.abs(p.wx - wx) > r);
+}
+
+function weightedKind(): EnemyKind {
   const r = Math.random();
-  if (r < 0.5) return "star";
-  if (r < 0.75) return "grow";
-  return "invis";
+  if (r < 0.45) return "walker";
+  if (r < 0.75) return "spiker";
+  return "flyer";
+}
+
+// Lay a spread-out trail of collectibles (coins with stars & power-ups
+// intermixed, never stacked together) along [x0, x1] at the given base y.
+function collectibleTrail(s: GameState, x0: number, x1: number, baseY: number) {
+  let x = x0 + rand(30, 80);
+  while (x < x1 - 30) {
+    const y = Math.random() < 0.6 ? baseY - 30 : baseY - 30 - rand(45, 95);
+    const r = Math.random();
+    if (r < 0.6) {
+      s.coins.push({ id: s.nextId++, wx: x, y });
+    } else if (r < 0.72) {
+      s.powerups.push({ id: s.nextId++, wx: x, y, type: "star" });
+    } else if (r < 0.78) {
+      s.powerups.push({ id: s.nextId++, wx: x, y, type: "grow" });
+    } else if (r < 0.84) {
+      s.powerups.push({ id: s.nextId++, wx: x, y, type: "invis" });
+    }
+    // else: an intentional empty gap in the trail
+    x += rand(85, 165);
+  }
 }
 
 function generateAhead(s: GameState) {
   const ahead = s.ninja.worldX + s.W * 2.2;
   while (s.nextX < ahead) {
     const diff = s.ninja.worldX;
-    const maxJumpGap = Math.min(210, s.runSpeed * 0.78);
-    const gap = chance(0.7) ? rand(75, Math.max(95, maxJumpGap)) : 0;
-    const platLen = rand(220, 400);
+    const airtime = (2 * JUMP_V) / GRAVITY;
+    const maxJumpGap = Math.min(150, s.runSpeed * airtime * 0.85);
+    const gap = chance(0.72) ? rand(48, Math.max(64, maxJumpGap)) : 0;
+    const platLen = rand(180, 320);
     const x0 = s.nextX + gap;
     const x1 = x0 + platLen;
     s.ground.push({ x0, x1 });
 
-    // Lower-tier coins.
-    if (chance(0.65)) {
-      const n = Math.floor(rand(3, 6));
-      const startX = rand(x0 + 30, Math.max(x0 + 30, x1 - 30 - n * 34));
-      for (let i = 0; i < n; i++) {
-        s.coins.push({ id: s.nextId++, wx: startX + i * 34, y: s.groundTopY - 30 });
-      }
-    }
+    // Spread collectibles on the lower tier.
+    collectibleTrail(s, x0, x1, s.groundTopY);
 
-    // Second tier platform (sometimes) with its own coins / enemy.
-    if (chance(0.42)) {
-      const uw = rand(130, 230);
+    // Second tier platform (sometimes) with its own trail.
+    if (chance(0.4)) {
+      const uw = rand(120, 210);
       const ux0 = rand(x0 + 10, Math.max(x0 + 10, x1 - uw - 10));
       const uy = s.groundTopY - UPPER_OFFSET;
-      const up: Upper = { id: s.nextId++, x0: ux0, x1: ux0 + uw, y: uy };
-      s.platforms.push(up);
-      const n = Math.floor(rand(2, 5));
-      const startX = rand(ux0 + 20, Math.max(ux0 + 20, ux0 + uw - 20 - n * 30));
-      for (let i = 0; i < n; i++) {
-        s.coins.push({ id: s.nextId++, wx: startX + i * 30, y: uy - 30 });
-      }
-      if (diff > 3000 && chance(0.4)) {
-        s.enemies.push({
-          id: s.nextId++,
-          wx: rand(ux0 + 30, ux0 + uw - 30),
-          y: uy - ENEMY_H / 2,
-          vx: -rand(15, 45),
-        });
-      }
+      s.platforms.push({ id: s.nextId++, x0: ux0, x1: ux0 + uw, y: uy });
+      collectibleTrail(s, ux0, ux0 + uw, uy);
     }
 
-    // Ground enemies.
-    const enemyChance = Math.min(0.8, 0.3 + diff / 12000);
+    // One enemy at a time, well-spaced so a beginner can handle each.
+    const enemyChance = Math.min(0.7, 0.4 + diff / 14000);
     if (chance(enemyChance)) {
-      const count = diff > 5000 && chance(0.35) ? 2 : 1;
-      for (let i = 0; i < count; i++) {
-        s.enemies.push({
-          id: s.nextId++,
-          wx: rand(x0 + 70, x1 - 40) + i * 66,
-          y: s.groundTopY - ENEMY_H / 2,
-          vx: -rand(20, 55),
-        });
+      const wx = rand(x0 + 70, x1 - 60);
+      if (wx - s.lastEnemyX >= 620) {
+        spawnEnemy(s, wx, weightedKind());
+        s.lastEnemyX = wx;
+        clearCollectiblesNear(s, wx, 48);
       }
-    }
-
-    // Periodic power-ups.
-    if (chance(0.16)) {
-      s.powerups.push({
-        id: s.nextId++,
-        wx: rand(x0 + 40, x1 - 40),
-        y: s.groundTopY - (chance(0.5) ? 95 : UPPER_OFFSET + 30),
-        type: pickPower(),
-      });
     }
 
     s.nextX = x1;
@@ -204,24 +238,28 @@ export function createGame(W: number, H: number): GameState {
       grounded: true,
       jumps: 0,
     },
-    ground: [{ x0: -W, x1: W * 1.4 }],
+    ground: [{ x0: -W, x1: W * 0.95 }],
     platforms: [],
     coins: [],
     enemies: [],
     powerups: [],
-    nextX: W * 1.4,
+    nextX: W * 0.95,
     runSpeed: RUN_START,
     coinsCollected: 0,
     stars: 0,
     growUntil: 0,
     invisUntil: 0,
+    starUntil: 0,
     invUntil: 0,
+    lastEnemyX: 0,
     now: Date.now(),
     status: "playing",
     nextId: 1,
     events: [],
   };
   generateAhead(s);
+  // Give the player a few collectibles right away on the starting platform.
+  collectibleTrail(s, W * 0.4, W * 0.9, groundTopY);
   return s;
 }
 
@@ -291,18 +329,12 @@ export function step(s: GameState, dt: number, input: Input) {
   s.runSpeed = Math.min(RUN_MAX, RUN_START + (n.worldX / 100) * RUN_ACCEL);
   n.worldX += s.runSpeed * dt;
 
-  // Jump / double jump (edge-triggered).
+  // Infinite flap: every tap gives lift. Cap the top so the ninja can
+  // hover but never leave the screen.
   if (input.jumpQueued) {
-    if (n.grounded) {
-      n.vy = -JUMP_V;
-      n.grounded = false;
-      n.jumps = 1;
-      s.events.push("jump");
-    } else if (n.jumps < MAX_JUMPS) {
-      n.vy = -JUMP_V * 0.92;
-      n.jumps += 1;
-      s.events.push("jump");
-    }
+    n.vy = -JUMP_V;
+    n.grounded = false;
+    s.events.push("jump");
   }
   input.jumpQueued = false;
 
@@ -318,27 +350,40 @@ export function step(s: GameState, dt: number, input: Input) {
     n.y += n.vy * dt;
     const feet = n.y + NINJA_H / 2;
     if (n.vy > 0) landIfPossible(s, feetBefore, feet);
+    // Cap at the top of the screen.
+    const topLimit = NINJA_H / 2 + 6;
+    if (n.y < topLimit) {
+      n.y = topLimit;
+      if (n.vy < 0) n.vy = 0;
+    }
   }
 
   const invincible = s.now < s.invUntil;
   const grow = s.now < s.growUntil;
+  const smash = grow || s.now < s.starUntil; // grow/star destroy enemies
   const nx = s.screenX;
   const ny = n.y;
-  const nw = grow ? NINJA_W * 1.25 : NINJA_W;
-  const nh = grow ? NINJA_H * 1.25 : NINJA_H;
+  const nw = grow ? NINJA_W * 1.5 : NINJA_W;
+  const nh = grow ? NINJA_H * 1.5 : NINJA_H;
 
   // Enemies.
   for (let i = s.enemies.length - 1; i >= 0; i--) {
     const e = s.enemies[i];
     e.wx += e.vx * dt;
+    if (e.kind === "flyer") e.y = e.by + Math.sin(s.now / 300 + e.ph) * 16;
     const ex = screenXOf(s, e.wx);
     if (ex < -ENEMY_W || e.wx < n.worldX - s.W) {
       s.enemies.splice(i, 1);
       continue;
     }
-    if (aabb(nx, ny, nw, nh, ex, e.y, ENEMY_W, ENEMY_H)) {
-      if (invincible) {
+    if (!e.passed && aabb(nx, ny, nw, nh, ex, e.y, ENEMY_W, ENEMY_H)) {
+      if (smash) {
+        // Grow / star: smash through the enemy.
         s.enemies.splice(i, 1);
+        s.events.push("through");
+      } else if (invincible) {
+        // Invisibility: pass through WITHOUT destroying the enemy.
+        e.passed = true;
         s.events.push("through");
       } else {
         s.status = "dead";
@@ -383,6 +428,7 @@ export function step(s: GameState, dt: number, input: Input) {
         s.invisUntil = s.now + INVIS_MS;
         s.invUntil = Math.max(s.invUntil, s.now + INVIS_MS);
       } else {
+        s.starUntil = s.now + STAR_MS;
         s.invUntil = Math.max(s.invUntil, s.now + STAR_MS);
         s.stars += 1;
         if (s.stars >= STARS_PER_LIFE) {

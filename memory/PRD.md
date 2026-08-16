@@ -36,17 +36,18 @@ Build a mobile app "identical to" the uploaded TinyNinja iOS game (.ipa). After 
 
 ## Implemented (2026-06)
 - [x] Home screen with best score + lives + Play + Settings.
-- [x] Horizontal auto-runner with parallax hills, flat-vector ninja.
-- [x] Tap-anywhere jump + JUMP button, **double jump**.
+- [x] Horizontal auto-runner (LANDSCAPE-locked via expo-screen-orientation), parallax hills, flat-vector ninja.
+- [x] **Infinite "flap" jump** — tap anywhere (full-screen `jump-zone`, `onPress`) gives lift; capped at the top so the ninja can hover but never leaves the screen. No jump button.
 - [x] Ground with jumpable gaps; **second-tier floating platforms**.
-- [x] Enemies (contact = death unless invincible).
-- [x] Coins = score; live HUD with coin score + 3 star pips + lives.
-- [x] Power-ups: grow big / ninja star / invisibility → temporary invincibility (run through enemies); grow scales ninja; invis fades ninja.
-- [x] Stars → lives (3 stars = +1 life), lives persisted.
-- [x] Game Over overlay; **Continue (spend 1 life)** resumes same run via `engine.revive()`.
-- [x] Pause / resume / home; Retry (fresh run).
-- [x] Settings: haptics toggle, reset progress.
-- [x] Verified by testing agent (iteration_3): ~95% pass, no critical bugs.
+- [x] **Three enemy types**: walker (red), spiker (orange, spikes), flyer (violet, bobbing). One enemy at a time, well-spaced (>=620px), beginner-fair; collectibles overlapping an enemy are cleared.
+- [x] Coins = score; spread out with stars & power-ups intermixed (never stacked).
+- [x] Power-ups: **grow big** (1.5x, invincible, smashes enemies), **ninja star** (spins player, invincible, smashes, +progress to life), **invisibility** (translucent, invincible, passes THROUGH enemies without destroying them).
+- [x] Stars -> lives (3 stars = +1 life), lives persisted; Continue (spend 1 life) resumes same run.
+- [x] Pause / resume / home; Retry (fresh run); Settings: haptics toggle, reset progress.
+- [x] Slow, forgiving physics (RUN_START 110, GRAVITY 1700, JUMP_V 760).
+
+## Controls
+- Tap anywhere = flap (infinite). Tap the pause button (top-left) to pause.
 
 ## Known Notes
 - Haptics only fire on real devices (not web/Expo Go web preview).

@@ -19,6 +19,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { useEffect } from "react";
 import { Ionicons } from "@expo/vector-icons";
+import * as ScreenOrientation from "expo-screen-orientation";
 
 import { colors, font, fontSize, radius, shadow, spacing } from "@/src/theme";
 import { Ninja } from "@/src/components/Ninja";
@@ -54,6 +55,9 @@ export default function Home() {
 
   useFocusEffect(
     useCallback(() => {
+      ScreenOrientation.lockAsync(
+        ScreenOrientation.OrientationLock.PORTRAIT_UP,
+      ).catch(() => {});
       (async () => {
         setBest((await storage.getItem<number>(KEY_BEST, 0)) ?? 0);
         setLives((await storage.getItem<number>(KEY_LIVES, 0)) ?? 0);
@@ -124,8 +128,8 @@ export default function Home() {
           <Text style={styles.playText}>PLAY</Text>
         </Pressable>
         <Text style={styles.hint}>
-          Tap anywhere to jump · tap again to double-jump · grab power-ups to
-          smash through enemies
+          Tap and keep tapping to fly · glide through coins, stars & power-ups ·
+          dodge the enemies
         </Text>
       </View>
 

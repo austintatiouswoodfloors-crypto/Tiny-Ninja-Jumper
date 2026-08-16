@@ -12,6 +12,7 @@ import { BlurView } from "expo-blur";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import * as ScreenOrientation from "expo-screen-orientation";
 
 import { colors, font, fontSize, radius, shadow, spacing } from "@/src/theme";
 import {
@@ -71,6 +72,24 @@ export default function Game() {
   useEffect(() => {
     hapticsRef.current = settings.haptics;
   }, [settings.haptics]);
+
+  // Lock to landscape while playing; restore portrait on exit.
+  useEffect(() => {
+    (async () => {
+      try {
+        await ScreenOrientation.lockAsync(
+          ScreenOrientation.OrientationLock.LANDSCAPE,
+        );
+      } catch {
+        // no-op (web / unsupported)
+      }
+    })();
+    return () => {
+      ScreenOrientation.lockAsync(
+        ScreenOrientation.OrientationLock.PORTRAIT_UP,
+      ).catch(() => {});
+    };
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -188,6 +207,8 @@ export default function Game() {
   const power = activePower(s);
   const powered = s.now < s.growUntil;
   const invisible = s.now < s.invisUntil;
+  const starActive = s.now < s.starUntil;
+  const spin = starActive ? Math.floor((s.now / 2) % 360) : 0;
 
   const hillW = 260;
   const hillSpan = W + hillW;
@@ -210,15 +231,6 @@ export default function Game() {
           />
         ))}
       </View>
-
-      {/* Jump tap zone (full screen, behind HUD/controls) */}
-      {screen === "playing" && (
-        <Pressable
-          testID="jump-zone"
-          style={StyleSheet.absoluteFill}
-          onPressIn={doJump}
-        />
-      )}
 
       {/* Entity layer */}
       <View style={[StyleSheet.absoluteFill, { pointerEvents: "none" }]}>
@@ -243,10 +255,27 @@ export default function Game() {
           <PowerUpView key={pu.id} x={screenXOf(s, pu.wx)} y={pu.y} type={pu.type} />
         ))}
         {s.enemies.map((e) => (
-          <EnemyView key={e.id} x={screenXOf(s, e.wx)} y={e.y} />
+          <EnemyView key={e.id} x={screenXOf(s, e.wx)} y={e.y} kind={e.kind} />
         ))}
-        <NinjaView x={s.screenX} y={s.ninja.y} pose={pose} powered={powered} invisible={invisible} />
+        <NinjaView
+          x={s.screenX}
+          y={s.ninja.y}
+          pose={pose}
+          powered={powered}
+          invisible={invisible}
+          spin={spin}
+        />
       </View>
+
+      {/* Jump tap zone: above entities so taps register; below HUD so
+          the pause button stays tappable. Tap anywhere to flap. */}
+      {screen === "playing" && (
+        <Pressable
+          testID="jump-zone"
+          style={StyleSheet.absoluteFill}
+          onPress={doJump}
+        />
+      )}
 
       {/* HUD */}
       <View
@@ -286,17 +315,7 @@ export default function Game() {
         </View>
       )}
 
-      {/* Jump button affordance */}
-      {screen === "playing" && (
-        <Pressable
-          testID="jump-button"
-          style={[styles.jumpBtn, { bottom: insets.bottom + spacing.lg }]}
-          onPressIn={doJump}
-        >
-          <Ionicons name="arrow-up" size={34} color={colors.onBrandPrimary} />
-          <Text style={styles.jumpLabel}>JUMP</Text>
-        </Pressable>
-      )}
+      {/* Jump: tap anywhere on screen (jump-zone). No visible button. */}
 
       {/* Pause overlay */}
       {screen === "paused" && (

@@ -1,0 +1,28 @@
+{
+  "summary": "Frontend-only iteration_4 test of Tiny Ninja horizontal runner in LANDSCAPE (844x390). All 11 requested checks pass. Home renders home-best-score / home-lives-pill / home-play-button / home-settings-button; Settings modal (haptics switch, reset, done) works and reset zeroes Best & Lives. PLAY navigates to /game with game-screen rendered. Old jump-button no longer exists; jump-zone (full-screen Pressable) is present and receives taps (double-jump triggers without crash). Game loop advances: score-value starts at 0 and rose to 1 then 2 within ~2s from spread coins on the starting platform (not frozen). Enemies visible in the background of the Paused screenshot (walker blob) and game ends on pit/enemy contact -> game-over-overlay with final coins, Best, Lives, retry-button, home-button, and New Best! badge. continue-button is correctly absent when lives=0. retry-button starts a fresh run (score reset to 0, overlay dismissed). Pause -> Resume works, pause-home-button visible; home-button returns to Home. No React Native red-screen and no PAGEERRORs captured. Persistence: within a single session Best updated to 2 after a run (New Best badge). No deprecated Expo packages spotted in tested files; no SafeAreaView issues detected.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "game", "issues": ["Unused legacy jumpBtn/jumpLabel styles remain in game.tsx StyleSheet (jumpBtn, jumpLabel) after removing the visible jump button; harmless but dead code."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/test_reports/iteration_4.json"],
+  "action_items": [
+    "Optional cleanup: remove unused jumpBtn / jumpLabel styles in /app/frontend/app/game.tsx (lines ~466-483) now that the on-screen jump button is gone."
+  ],
+  "critical_code_review_comments": [
+    "engine.step: pause-button remains clickable behind the game-over overlay via force=True; in normal use overlay covers it so this is fine, but could be guarded by disabling pause when screen==='dead'.",
+    "engine.generateAhead: enemyChance grows with distance up to 0.92 which is aggressive but consistent with 'more obstacles' requirement.",
+    "collectibleTrail correctly intermixes coins with stars/grow/invis and spaces them by rand(85,165) so coins are no longer stacked — matches requirement."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A", "frontend": "100%"},
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Base URL: https://mobile-app-clone-24.preview.emergentagent.com . Routes: '/' (home) and '/game'. Test in LANDSCAPE viewport 844x390 (orientation lock is a device-only no-op on web). Note that each browser_automation tool call gets a fresh browser context, so localStorage-based Best/Lives persistence must be verified WITHIN a single script run (as done here — New Best 2 appeared within the same run). Also: pause-button is clickable behind the game-over BlurView with force=True, so trigger pause BEFORE the ninja dies to test pause overlay reliably.",
+  "rca_of_issue": "N/A — no bugs found."
+}
